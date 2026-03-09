@@ -1,0 +1,3 @@
+requests~=2.32.5
+python-dotenv~=1.2.2
+git+https://github.com/openskynetwork/opensky-api.git#egg=opensky-api&subdirectory=python
