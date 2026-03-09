@@ -1,0 +1,15 @@
+#Security / Secrets
+.env
+
+#Python Virtual Environments
+.venv/
+venv/
+env/
+
+#Python Cache
+__pycache__/
+*.pyc
+
+#IDE Files
+.idea/
+.vscode/
