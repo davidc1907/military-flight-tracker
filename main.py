@@ -73,7 +73,7 @@ def check_flight_profile(icao_hex, current_alt, current_hdg, flight_type):
         if current_alt == "ground" or current_alt < 28000:
             return False
 
-        if not (45 <= current_hdg <= 135):
+        if not (45 <= current_hdg <= 160):
             return False
 
         if icao_hex in flight_history:
@@ -104,9 +104,18 @@ def fetch_adsbfi():
                     hex_code = plane.get("hex")
                     alt = plane.get("alt_baro")
                     hdg = plane.get("track")
+                    lat = plane.get("lat")
+                    lon = plane.get("lon")
 
                     if hex_code and alt and hdg:
-                        active_planes[hex_code] = {"alt": alt, "hdg": hdg, "type": ac_type, "source": "adsb.fi"}
+                        active_planes[hex_code] = {
+                            "alt": alt,
+                            "hdg": hdg,
+                            "lat": lat,
+                            "lon": lon,
+                            "type": ac_type,
+                            "source": "adsb.fi"
+                        }
     except Exception as e:
         print(f"Error fetching adsb.fi data: {e}")
     return active_planes
@@ -124,7 +133,14 @@ def fetch_opensky():
                     hdg = s.true_track
 
                     if alt_feet and hdg:
-                        active_planes[s.icao24] = {"alt": alt_feet, "hdg": hdg, "type": s.callsign, "source": "opensky"}
+                        active_planes[s.icao24] = {
+                            "alt": alt_feet,
+                            "hdg": hdg,
+                            "lat": s.latitude,
+                            "lon": s.longitude,
+                            "type": s.callsign,
+                            "source": "opensky"
+                        }
     except Exception as e:
         print(f"Error fetching opensky data: {e}")
     return active_planes
@@ -135,6 +151,17 @@ def send_discord_alert(message):
             requests.post(WEBHOOK_URL, json={"content": message})
         except Exception as e:
             print(f"Error sending Discord alert: {e}")
+
+def estimate_route(lon, hdg):
+    if lon is None or hdg is None:
+        return "Route: Position unknown"
+    if lon < -10:
+        return "Route: Transatlantic (West -> East)"
+
+    elif lon > 5 and 100 <= hdg <= 160:
+        return "Route: Middle East Deployment (Europe -> Middle East)"
+
+    return "Route: Strategic Movement"
 
 def main():
     print("Startet Tracker. Polling every 60 seconds")
@@ -158,10 +185,12 @@ def main():
 
             if is_deploying:
                 map_link = f"https://globe.adsb.fi/?icao={hex_code}"
+                route_info = estimate_route(plane_data["lon"], plane_data["hdg"])
 
                 msg = (
                     f"🚨 **ALERT** 🚨 \n"
                     f"Type: `{plane_data['type']}` (Hex: `{hex_code}`) \n"
+                    f"{route_info}\n"
                     f"Altitude: `{int(plane_data['alt'])} ft` \n"
                     f"Heading: `{int(plane_data['hdg'])}°` \n"
                     f"Source: *{plane_data['source']}* \n"
