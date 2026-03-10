@@ -11,13 +11,14 @@ OPENSKY_USER = os.getenv("OPENSKY_USER")
 OPENSKY_PASS = os.getenv("OPENSKY_SECRET")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 TRAINING_MODE = os.getenv("TRAINING_MODE", "False").lower() == "true"
+GOOGLE_GEO_API = os.getenv("GOOGLE_GEO_API")
 # Minimum wait time between alerts for the same aircraft (seconds)
 ALERT_COOLDOWN = 7200
 
 api_opensky = OpenSkyApi(OPENSKY_USER, OPENSKY_PASS)
 
 # Military aircraft model/type codes to track from ADS-B Exchange feed
-TARGET_TYPES = ["E6", "R135", "V25", "C32", "E3TF", "B2", "E4", "RQ4", "U2", "B52", "B1", "K35R"]
+TARGET_TYPES = ["E6", "R135", "V25", "C32", "E3TF", "B2", "E4", "RQ4", "U2", "B52", "B1", "K35R", "MQ9", "P8", "MQ4", "F35", "F22", "EUFI", "V22"]
 
 # Known ICAO24 addresses for high-interest aircraft tracked from OpenSky
 KNOWN_ICAO_HEX = [
@@ -147,6 +148,9 @@ def fetch_adsbfi():
                             "lat": lat,
                             "lon": lon,
                             "type": ac_type,
+                            "flight": plane.get("flight", "N/A"),
+                            "desc": plane.get("desc", ac_type),
+                            "gs": plane.get("gs", 0),
                             "source": "adsb.fi"
                         }
     except Exception as e:
@@ -179,6 +183,33 @@ def fetch_opensky():
     except Exception as e:
         print(f"Error fetching opensky data: {e}")
     return active_planes
+
+def get_google_location(lat, lon):
+    if lat is None or lon is None:
+        return "Position unknown"
+
+    url = f"https://maps.googleapis.com/maps/api/geocode/json?latlng={lat},{lon}&result_type=country&key={GOOGLE_GEO_API}"
+
+    try:
+        response = requests.get(url, timeout=5)
+
+        if response.status_code == 200:
+            data = response.json()
+
+            if data.get("status") == "ZERO_RESULTS":
+                return "Offshore / Oceanic Airspace"
+
+            elif data.get("status") == "OK" and len(data.get("results")) > 0:
+                address = data["results"][0].get("formatted_address", "Unknown Region")
+                return f"🗺️ {address}"
+
+            else:
+                return "Unknown Region"
+    except Exception as e:
+        print(f"Error fetching Google location: {e}")
+
+    return "Offline"
+
 
 def send_discord_alert(message):
     """Post a plain-text alert message to the configured Discord webhook."""
@@ -231,6 +262,12 @@ def main():
             if is_deploying or (is_special and vip_cooldown_ok):
                 route_info = estimate_route(plane_data.get("lon"), plane_data.get("hdg"))
                 map_link = f"https://globe.adsb.fi/?icao={hex_code}" if plane_data.get("lon") else "No coordinates"
+                location_info = get_google_location(plane_data.get("lat"), plane_data.get("lon"))
+                callsign = plane_data.get("flight", "").strip()
+                if not callsign:
+                    callsign = "N/A"
+
+                full_desc = plane_data.get("desc", plane_data.get("t", "Unknown Type"))
 
                 if is_special:
                     if hex_code not in flight_history:
@@ -241,12 +278,14 @@ def main():
                     prefix = "🚨 **STRATEGIC ALERT** 🚨"
 
                 msg = (
-                    f"{prefix} \n"
-                    f"Type: `{plane_data['type']}` (Hex: `{hex_code}`) \n"
-                    f"{route_info}\n"
-                    f"Altitude: `{int(plane_data['alt'])} ft` \n"
-                    f"Heading: `{int(plane_data['hdg'])}°` \n"
-                    f"Source: *{plane_data['source']}* \n"
+                    f"{prefix}\n"
+                    f"**Callsign:** `{callsign}`\n"
+                    f"**Type:** {full_desc} (Hex: `{hex_code}`)\n"
+                    f"**Location:** {location_info}\n"
+                    f"**Altitude:** `{int(plane_data['alt'])} ft`\n"
+                    f"**Speed:** `{int(plane_data.get('gs', 0))} kts`\n"
+                    f"**Heading:** `{int(plane_data['hdg'])}°`\n"
+                    f"**Source:** *{plane_data['source']}*\n"
                     f"🌍 **Live Map:** {map_link}"
                 )
                 print(msg)

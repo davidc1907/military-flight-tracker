@@ -20,6 +20,13 @@ A Python based tool to track strategic military movements in Real Time and conve
 * **Boeing B-52 Stratofortress**
 * **Rockwell B-1 Lancer**
 * **Boeing KC-135 Stratotanker**
+* **General Atomics MQ-9 Reaper**
+* **Boeing P-8A Poseidon**
+* **Northrop Grumman MQ-4C Triton**
+* **Bell Boeing V-22 Osprey**
+* **Lockheed Martin F-35 Lightning II**
+* **Lockheed Martin F-22 Raptor**
+* **Eurofighter Typhoon**
 
 ## Installation and Setup
 1. Clone the repository
