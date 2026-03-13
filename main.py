@@ -38,9 +38,9 @@ def process_target(hex_code, plane):
 
         if is_special:
             priority_tag = "VIP"
-        elif profile_score > 85:
+        elif profile_score >= 85:
             priority_tag = "HIGH"
-        elif profile_score > 70:
+        elif profile_score >= 70:
             priority_tag = "MEDIUM"
 
         location = geocode(plane.get("lat"), plane.get("lon"))
@@ -70,6 +70,7 @@ def process_target(hex_code, plane):
             speed = speed,
             heading = hdg,
             source = plane.get("source", "API"),
+            priority_tag = priority_tag,
             reg = reg,
             ownOp = ownOp,
             squawk = squawk,
