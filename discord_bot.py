@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 DB_FILE = 'corvus-bot.db'
 
+# SQLite helpers to persist per-channel subscriptions
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()

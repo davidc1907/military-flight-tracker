@@ -3,29 +3,11 @@ from core.history import flight_history
 from config import CFG
 import math
 
+
 def check_profile(hex_code, alt, hdg, lat, lon, plane):
+    # Score incoming plane based on altitude, heading stability, and hotzone checks
     score = 0
-    STRATEGIC_TYPES = ["K35R", "K46A", "E3TF", "R135"]
-    aircraft_type = (plane.get("type") or "").upper()
-    if aircraft_type in STRATEGIC_TYPES:
-        score += 30
-    callsign = (plane.get("flight") or plane.get("callsign") or "").strip()
-    is_logistics = any(callsign.startswith(p) for p in ["RCH", "RRR", "CTM"])
-
-    aircraft_type = (plane.get("type") or "").upper()
-    is_tanker = aircraft_type in ["K35R", "K46A", "K35", "KC10"]
-    if is_tanker:
-        score += 20
-
-    is_new_plane = False
     now = time.time()
-
-    if hex_code not in flight_history:
-        is_new_plane = True
-        flight_history[hex_code] = {
-            "alt": alt, "hdg": hdg, "time": now,
-            "last_alert": 0, "last_score": 0, "alerted_score": 0
-        }
 
     if CFG.training_mode:
         return True
@@ -45,13 +27,13 @@ def check_profile(hex_code, alt, hdg, lat, lon, plane):
     hdg_diff = abs(hdg - prev["hdg"])
     hdg_diff = min(hdg_diff, 360 - hdg_diff)
 
-    #Check if Plane is above 28.000 feet if yes -> score + 25
+    # Gate 1: Altitude weight
     if alt > 28000:
         score += 25
     elif alt > 20000:
         score += 15
 
-   #Check if Plane has moved less than 4 degrees in the last 4 minutes. If yes -> score + 25
+    # Gate 2: Heading stability within window
     if hdg_diff > CFG.stable_hdg_delta:
         prev["hdg"] = hdg
         prev["time"] = now
@@ -61,8 +43,9 @@ def check_profile(hex_code, alt, hdg, lat, lon, plane):
             prev["time"] = now
 
     in_hotzone = False
-    #Check if Plane is in a hotzone if yes -> score + 30
-    if lat is None and lon is None:
+
+    # Gate 3a: Direct hotzone hit
+    if lat is not None and lon is not None:
         for zone in CFG.HOTZONES:
             try:
                 lat_min, lat_max, lon_min, lon_max = zone
@@ -77,7 +60,7 @@ def check_profile(hex_code, alt, hdg, lat, lon, plane):
             except (TypeError, ValueError):
                 continue
 
-    #Check if Plane has a projected entry into a hotzone if yes -> score + 20
+    # Gate 3b: Projected hotzone entry
     if not in_hotzone and lat is not None and lon is not None:
         hdg_rad = math.radians(hdg)
 
@@ -103,10 +86,7 @@ def check_profile(hex_code, alt, hdg, lat, lon, plane):
     old_score = prev.get("last_score", 0)
     prev["last_score"] = score
 
-    if is_logistics:
-        score -= 15
-
-    #Implement a threshold check as Gate 3
+    # Gate 4: Threshold and deduplication
     proceed_to_gate_4 = False
     threshold = 40 if in_hotzone else 70
 
@@ -120,7 +100,6 @@ def check_profile(hex_code, alt, hdg, lat, lon, plane):
     else:
         return False
 
-    #Dedup and Cooldown as Gate 4
     if proceed_to_gate_4:
         time_since_last_alert = now - prev.get("last_alert", 0)
         score_diff = score - prev.get("alerted_score", 0)

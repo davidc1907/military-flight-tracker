@@ -12,11 +12,13 @@ from core.routing import estimate_route
 from services.geocode import geocode
 from services.discord import send_strategic_alert
 from config import CFG
+from sources.flightradar import fetch_flightradar
 
 setup_logging()
 logger = logging.getLogger(__name__)
 
 
+# Process one aircraft and trigger alert if filters pass
 def process_target(hex_code, plane):
     try:
         raw_alt = plane.get("alt", 0)
@@ -94,8 +96,40 @@ def main():
         cleanup()
 
         planes = {}
-        planes.update(fetch_adsbfi())
-        planes.update(fetch_opensky())
+        adsbfi_planes = fetch_adsbfi()
+        opensky_planes = fetch_opensky()
+        fr24_planes = fetch_flightradar()
+
+        # Prefer adsb.fi, enrich with OpenSky/FR24 when missing position/altitude
+        for hex_code, plane in adsbfi_planes.items():
+            planes[hex_code] = plane
+
+        for hex_code, plane in opensky_planes.items():
+            if hex_code not in planes:
+                planes[hex_code] = plane
+            else:
+                if planes[hex_code].get("lat") is None and plane.get("lat") is not None:
+                    planes[hex_code]["lat"] = plane["lat"]
+                    planes[hex_code]["lon"] = plane["lon"]
+                    planes[hex_code]["source"] = "adsb.fi + OpenSky"
+
+        for hex_code, plane in fr24_planes.items():
+            if hex_code not in planes:
+                planes[hex_code] = plane
+            else:
+                if planes[hex_code].get("lat") is None and plane.get("lat") is not None:
+                    planes[hex_code]["lat"] = plane["lat"]
+                    planes[hex_code]["lon"] = plane["lon"]
+
+                    if not planes[hex_code].get("alt"):
+                        planes[hex_code]["alt"] = plane["alt"]
+                    if not planes[hex_code].get("hdg"):
+                        planes[hex_code]["hdg"] = plane["hdg"]
+
+                    planes[hex_code]["source"] = "adsb.fi + FR24 (Pos)"
+
+
+
         logger.info(f"Fetched {len(planes)} planes total")
         for hex_code, plane in planes.items():
             process_target(hex_code, plane)
