@@ -5,9 +5,27 @@ import math
 
 def check_profile(hex_code, alt, hdg, lat, lon, plane):
     score = 0
+    STRATEGIC_TYPES = ["K35R", "K46A", "E3TF", "R135"]
+    aircraft_type = (plane.get("type") or "").upper()
+    if aircraft_type in STRATEGIC_TYPES:
+        score += 30
     callsign = (plane.get("flight") or plane.get("callsign") or "").strip()
     is_logistics = any(callsign.startswith(p) for p in ["RCH", "RRR", "CTM"])
+
+    aircraft_type = (plane.get("type") or "").upper()
+    is_tanker = aircraft_type in ["K35R", "K46A", "K35", "KC10"]
+    if is_tanker:
+        score += 20
+
+    is_new_plane = False
     now = time.time()
+
+    if hex_code not in flight_history:
+        is_new_plane = True
+        flight_history[hex_code] = {
+            "alt": alt, "hdg": hdg, "time": now,
+            "last_alert": 0, "last_score": 0, "alerted_score": 0
+        }
 
     if CFG.training_mode:
         return True
@@ -21,8 +39,6 @@ def check_profile(hex_code, alt, hdg, lat, lon, plane):
             "last_score": 0,
             "alerted_score": 0
         }
-
-        return False
 
     prev = flight_history[hex_code]
     time_tracked = now - prev["time"]
@@ -46,7 +62,7 @@ def check_profile(hex_code, alt, hdg, lat, lon, plane):
 
     in_hotzone = False
     #Check if Plane is in a hotzone if yes -> score + 30
-    if lat is not None and lon is not None:
+    if lat is None and lon is None:
         for zone in CFG.HOTZONES:
             try:
                 lat_min, lat_max, lon_min, lon_max = zone
@@ -87,11 +103,16 @@ def check_profile(hex_code, alt, hdg, lat, lon, plane):
     old_score = prev.get("last_score", 0)
     prev["last_score"] = score
 
+    if is_logistics:
+        score -= 15
+
     #Implement a threshold check as Gate 3
     proceed_to_gate_4 = False
+    threshold = 40 if in_hotzone else 70
+
     if score >= 80:
         proceed_to_gate_4 = True
-    elif 60 <= score <= 69:
+    elif threshold <= score <= 79:
         if score > old_score:
             proceed_to_gate_4 = True
         else:

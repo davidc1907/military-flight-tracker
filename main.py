@@ -26,6 +26,12 @@ def process_target(hex_code, plane):
         return
 
     profile_score = check_profile(hex_code, alt, hdg, plane.get("lat"), plane.get("lon"), plane)
+
+    if profile_score:
+        logger.info(f"DEBUG: {hex_code} passed filter with Score: {profile_score}")
+    else:
+        pass
+
     is_special = hex_code in SPECIAL_TARGETS
 
     current_time = time.time()
