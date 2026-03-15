@@ -36,13 +36,32 @@ def process_target(hex_code, plane):
     except (ValueError, TypeError):
         return
 
+    raw_callsign = str(plane.get("flight") or plane.get("callsign") or "").strip()
+    callsign = raw_callsign if raw_callsign else "N/A"
+    speed = plane.get("gs") or plane.get("speed") or 0
+    desc = plane.get("desc") or plane.get("type") or "Unknown Aircraft"
+    ownOp = plane.get("ownOp") or "Unknown Operator"
+
+    db_data = {
+        "hex_code": hex_code,
+        "callsign": callsign,
+        "lat": plane.get("lat"),
+        "lon": plane.get("lon"),
+        "alt": alt,
+        "hdg": hdg,
+        "speed": speed,
+        "type": desc,
+        "operator": ownOp
+    }
+
+    if db_data["lat"] is not None and db_data["lon"] is not None:
+        try:
+            supabase.table("sightings").insert(db_data).execute()
+        except Exception as e:
+            logger.error(f"Error inserting {callsign} ({hex_code}) into database: {e}")
+
+
     profile_score = check_profile(hex_code, alt, hdg, plane.get("lat"), plane.get("lon"), plane)
-
-    if profile_score:
-        logger.info(f"DEBUG: {hex_code} passed filter with Score: {profile_score}")
-    else:
-        pass
-
     is_special = hex_code in SPECIAL_TARGETS
 
     current_time = time.time()
@@ -52,7 +71,6 @@ def process_target(hex_code, plane):
     if profile_score or (is_special and vip_cooldown_ok):
 
         priority_tag = "STANDARD"
-
         if is_special:
             priority_tag = "VIP"
         elif profile_score >= 85:
@@ -61,17 +79,11 @@ def process_target(hex_code, plane):
             priority_tag = "MEDIUM"
 
         location = geocode(plane.get("lat"), plane.get("lon"))
-
-        raw_callsign = str(plane.get("flight") or plane.get("callsign") or "").strip()
-        callsign = raw_callsign if raw_callsign else "N/A"
-        speed = plane.get("gs") or plane.get("speed") or "N/A"
-        desc = plane.get("desc") or plane.get("type") or "Unknown Aircraft"
         reg = plane.get("reg") or "N/A"
-        ownOp = plane.get("ownOp") or "Unknown Operator"
         squawk = plane.get("squawk") or "N/A"
         emergency = plane.get("emergency") or "none"
         category = plane.get("category") or "N/A"
-        v_speed =plane.get("v_speed") or "N/A"
+        v_speed = plane.get("v_speed") or "N/A"
 
         if is_special:
             if hex_code not in flight_history:
@@ -79,40 +91,23 @@ def process_target(hex_code, plane):
             flight_history[hex_code]["last_alert"] = current_time
 
         send_strategic_alert(
-            callsign = callsign,
-            hex_code = hex_code,
-            full_desc = desc,
-            location = location,
-            alt = alt,
-            speed = speed,
-            heading = hdg,
-            source = plane.get("source", "API"),
-            priority_tag = priority_tag,
-            reg = reg,
-            ownOp = ownOp,
-            squawk = squawk,
-            v_speed = v_speed,
-            emergency = emergency,
-            category = category
+            callsign=callsign,
+            hex_code=hex_code,
+            full_desc=desc,
+            location=location,
+            alt=alt,
+            speed=speed,
+            heading=hdg,
+            source=plane.get("source", "API"),
+            priority_tag=priority_tag,
+            reg=reg,
+            ownOp=ownOp,
+            squawk=squawk,
+            v_speed=v_speed,
+            emergency=emergency,
+            category=category
         )
         logger.info(f"Sent alert for {callsign} ({hex_code})")
-
-        db_data = {
-            "hex_code": hex_code,
-            "callsign": callsign,
-            "lat": plane.get("lat"),
-            "lon": plane.get("lon"),
-            "alt": alt
-        }
-
-        if db_data["lat"] is not None and db_data["lon"] is not None:
-            try:
-                supabase.table("sightings").insert(db_data).execute()
-                logger.info(f"Inserted {callsign} ({hex_code}) into database")
-            except Exception as e:
-                logger.error(f"Error inserting {callsign} ({hex_code}) into database: {e}")
-        else:
-            logger.warning(f"No position data for {callsign} ({hex_code})")
 
 
 def main():
@@ -160,7 +155,7 @@ def main():
         for hex_code, plane in planes.items():
             process_target(hex_code, plane)
 
-        time.sleep(CFG.poll_interval_sec)
+        time.sleep(10)
 
 
 if __name__ == "__main__":
